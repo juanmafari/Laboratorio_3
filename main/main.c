@@ -21,8 +21,6 @@ int timeTimer = 500 ;
 
 QueueHandle_t handleCola;
 TimerHandle_t handleTimer;
-//TimerHandle_t azulTimer;
-//TimerHandle_t verdeTimer;
 
 void * puntazo;
 
@@ -36,6 +34,8 @@ char greenVal[] = "00FF00";
 char* rojo = redVal;
 char* azul = blueVal;
 char* verde = greenVal;
+
+char* pointee;
             
 void init(void) 
 {
@@ -60,8 +60,6 @@ void sendQueue(TimerHandle_t xTimer ){
     ESP_LOGI(SEND_TAG, "llegue a aca");
     puntazo = pvTimerGetTimerID(xTimer); 
     xQueueSendToBack(handleCola, puntazo, 0);
-    
-    
 }
 
 void ATaskFunction( void *pvParameters ){
@@ -74,16 +72,17 @@ void ATaskFunction( void *pvParameters ){
         clearblack();
         delay_ms(lTime);
         vTaskDelete( NULL );
-    }
-    
-        
+    }   
 }
 
 static void BTaskFunction(void *arg)
 {
-    char* Txdatapru = (char*) malloc(100);
+    bool send = false;
+    
     static const char *RX_TASK_TAG = "RX_TASK";
     esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
+
+    char* Txdatapru = (char*) malloc(100);
     data = (uint8_t*) malloc(RX_BUF_SIZE+1);
     dataTime = (uint8_t*) malloc(RX_BUF_SIZE+1);
     while (1) {
@@ -101,52 +100,45 @@ static void BTaskFunction(void *arg)
                 ESP_LOGI(RX_TASK_TAG, "time: '%d' ms",  timeTimer);
                 if (strcmp((char*) data, "red") == 0)
                 {
-                    if (timeTimer == 0)
-                    {
-                        static const char *SEND_TAG = "send_TASK";
-                        esp_log_level_set(SEND_TAG, ESP_LOG_INFO);
-                        ESP_LOGI(SEND_TAG, "llegue a aca");
-                        xQueueSendToBack(handleCola, rojo, 0);
-                    }
-                    else{
-                        handleTimer = xTimerCreate("sendQueue", pdMS_TO_TICKS(timeTimer), pdFALSE, rojo, sendQueue);
-                        xTimerStart(handleTimer, pdMS_TO_TICKS(0));
-                    }
+                    pointee = rojo;
+                    send = true;
                 }
                 else if (strcmp((char*) data, "blue") == 0)
                 {
-                    if (timeTimer == 0)
-                    {
-                        static const char *SEND_TAG = "send_TASK";
-                        esp_log_level_set(SEND_TAG, ESP_LOG_INFO);
-                        ESP_LOGI(SEND_TAG, "llegue a aca");
-                        xQueueSendToBack(handleCola, azul, 0);
-                    }
-                    else{
-                        
-                        handleTimer = xTimerCreate("sendQueue", pdMS_TO_TICKS(timeTimer), pdFALSE, azul, sendQueue);
-                        xTimerStart(handleTimer, pdMS_TO_TICKS(0));
-                    }
+                    pointee = azul;
+                    send = true;
                 }
                 else if (strcmp((char*) data, "green") == 0)
                 {
-                    if (timeTimer == 0)
-                    {
-                        static const char *SEND_TAG = "send_TASK";
-                        esp_log_level_set(SEND_TAG, ESP_LOG_INFO);
-                        ESP_LOGI(SEND_TAG, "llegue a aca");
-                        xQueueSendToBack(handleCola, verde, 0);
-                    }
-                    else{
-                        
-                        handleTimer = xTimerCreate("sendQueue", pdMS_TO_TICKS(timeTimer), pdFALSE, verde, sendQueue);
-                        xTimerStart(handleTimer, pdMS_TO_TICKS(0));
-                    }
-                }
-                else {
+                    pointee = verde;
+                    send = true;
+
+                }else {
                     sprintf (Txdatapru, " %s no identificado como color \r\n",(data));
                     uart_write_bytes(UART, Txdatapru, strlen(Txdatapru));
                 }   
+
+                if (send == true)
+                {
+                    if (timeTimer == 0){
+                        static const char *SEND_TAG = "send_TASK";
+                        esp_log_level_set(SEND_TAG, ESP_LOG_INFO);
+                        ESP_LOGI(SEND_TAG, "llegue a aca");
+                        xQueueSendToBack(handleCola, pointee, 0);
+                        send = false;
+                    }else{
+                        static const char *SEND_TAG = "send_TASK";
+                        esp_log_level_set(SEND_TAG, ESP_LOG_INFO);
+                        
+                        handleTimer = xTimerCreate("sendQueue", pdMS_TO_TICKS(timeTimer), pdFALSE, pointee, sendQueue);
+                        ESP_LOGI(SEND_TAG, "testingo");
+                        xTimerStart(handleTimer, pdMS_TO_TICKS(0));
+                        ESP_LOGI(SEND_TAG, "testingo,lasecuela");
+                        send = false;
+                    }
+                }
+                
+                
             } 
         }
     }
@@ -159,20 +151,16 @@ static void BTaskFunction(void *arg)
 void CTaskFunction(void *pvParameters){
     char* Txdata = (char*) malloc(100);
     char* Txdatazo = (char*) malloc(1024);
-
     while (1) {
-            if (xQueueReceive(handleCola, Txdatazo, (TickType_t) 0) == pdPASS) {
-                
-                sprintf (Txdata, " %s , son %d bytes \r\n",(Txdatazo),strlen(Txdatazo));
-                uart_write_bytes(UART, Txdata, strlen(Txdata));
-                
-                hextoco(Txdatazo);
-                memset(Txdatazo, 0, 1024);
-                vTaskDelay(2000 / portTICK_PERIOD_MS);
-            }
-            else{
-                vTaskDelay(2000 / portTICK_PERIOD_MS);
-            }
+        if (xQueueReceive(handleCola, Txdatazo, (TickType_t) 0) == pdPASS) { 
+            sprintf (Txdata, " %s , son %d bytes \r\n",(Txdatazo),strlen(Txdatazo));
+            uart_write_bytes(UART, Txdata, strlen(Txdata));
+            hextoco(Txdatazo);
+            memset(Txdatazo, 0, 1024);
+            vTaskDelay(2000 / portTICK_PERIOD_MS);
+        }else{
+            vTaskDelay(2000 / portTICK_PERIOD_MS);
+        }
     }
 }
 
